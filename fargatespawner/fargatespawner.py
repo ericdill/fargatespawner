@@ -42,6 +42,9 @@ AwsCreds = namedtuple('AwsCreds', [
 ])
 
 
+ECS_TASK_METADATA_ENDPOINT = '169.254.170.2'
+
+
 class Datetime(TraitType):
     klass = datetime.datetime
     default_value = datetime.datetime(1900, 1, 1)
@@ -78,7 +81,9 @@ class FargateSpawnerECSRoleAuthentication(FargateSpawnerAuthentication):
         now = datetime.datetime.now()
 
         if now > self.expiration:
-            request = HTTPRequest('http://169.254.170.2' + os.environ['AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'], method='GET')
+            # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v2.html
+            endpoint = f'http://{ECS_TASK_METADATA_ENDPOINT}/{os.environ['AWS_CONTAINER_CREDENTIALS_RELATIVE_URI']}'
+            request = HTTPRequest(endpoint + , method='GET')
             creds = json.loads((await AsyncHTTPClient().fetch(request)).body.decode('utf-8'))
             self.aws_access_key_id = creds['AccessKeyId']
             self.aws_secret_access_key = creds['SecretAccessKey']
@@ -324,6 +329,10 @@ async def _run_task(logger, aws_endpoint,
                     task_cluster_name, task_container_name, task_definition_arn, task_security_groups, task_subnets,
                     task_assign_public_ip, task_platform_version,
                     task_command_and_args, task_env):
+    # Full ECS "RunTask" API docs
+    # https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html
+    # Boto ECS RunTask docs
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs.html#ECS.Client.run_task
     return await _make_ecs_request(logger, aws_endpoint, 'RunTask', {
         'cluster': task_cluster_name,
         'taskDefinition': task_definition_arn,
